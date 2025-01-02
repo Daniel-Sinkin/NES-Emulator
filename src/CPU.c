@@ -26,6 +26,13 @@ uint8_t CPU_read(CPU *cpu, uint16_t addr) {
     return BUS_read(cpu->bus, addr, false);
 }
 
+uint8_t CPU_read_pc(CPU *cpu) {
+    // Also increments the PC
+    uint8_t val = CPU_read(cpu, cpu->reg.PC);
+    cpu->reg.PC += 1;
+    return val;
+}
+
 void CPU_write(CPU *cpu, uint16_t addr, uint8_t data) {
     BUS_write(cpu->bus, addr, data);
 }
@@ -70,14 +77,9 @@ void CPU_print_registers(CPU *cpu) {
     printf("=====================\n");
 }
 
-void CPU_read_pc(CPU *cpu) {
-    cpu->opcode = CPU_read(cpu, cpu->reg.PC);
-    cpu->reg.PC += 1;
-}
-
 void CPU_clock(CPU *cpu) {
     if (cpu->cycles == 0) {
-        CPU_read_pc(cpu);
+        cpu->opcode = CPU_read_pc(cpu);
 
         OP_CODE_MATRIX_ENTRY op_code_matrix_entry = OP_CODE_MATRIX[cpu->opcode];
         cpu->cycles = op_code_matrix_entry.cycles;
@@ -101,40 +103,118 @@ void CPU_fetch(CPU *cpu) {
 
 // Addressing mode functions
 uint8_t CPU_AM_IMP(CPU *cpu) {
+    cpu->fetched = cpu->reg.A; // Fetches accumulator value
     return 0;
 }
 uint8_t CPU_AM_ZP0(CPU *cpu) {
+    // 0XABCD -> page 0xAB offset into that page 0xCD, have 255 pages w/ 255 entries each
+    cpu->addr_abs = CPU_read_pc(cpu);
+    cpu->addr_abs &= 0x00FF;
+
     return 0;
 }
 uint8_t CPU_AM_ZPY(CPU *cpu) {
+    cpu->addr_abs = (CPU_read_pc(cpu) + cpu->reg.Y) & 0x00FF;
     return 0;
 }
 uint8_t CPU_AM_ABS(CPU *cpu) {
+    uint16_t low = CPU_read_pc(cpu);
+    uint16_t high = CPU_read_pc(cpu);
+
+    cpu->addr_abs = (high << 8) | low;
+
     return 0;
 }
 uint8_t CPU_AM_ABY(CPU *cpu) {
-    return 0;
+    uint16_t low = CPU_read_pc(cpu);
+    uint16_t high = CPU_read_pc(cpu);
+
+    cpu->addr_abs = (high << 8) | low;
+    cpu->addr_abs += cpu->reg.Y;
+
+    // Deals with overflows
+    if ((cpu->addr_abs & 0xFF00) != (high << 8)) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 uint8_t CPU_AM_IZX(CPU *cpu) {
+    uint16_t addr = CPU_read_pc(cpu);
+
+    uint16_t low_addr = (uint16_t)(addr + (uint16_t)cpu->reg.X) & 0x00FF;
+    uint16_t low = CPU_read(cpu, low_addr);
+    uint16_t high_addr = (uint16_t)(addr + (uint16_t)cpu->reg.X + 1) & 0x00FF;
+    uint16_t high = CPU_read(cpu, high_addr);
+
+    cpu->addr_abs = (high << 8) | low;
+
     return 0;
 }
 uint8_t CPU_AM_IMM(CPU *cpu) {
+    cpu->addr_abs += cpu->reg.PC;
+    cpu->reg.PC += 1;
     return 0;
 }
 uint8_t CPU_AM_ZPX(CPU *cpu) {
+    cpu->addr_abs = (cpu) + cpu->reg.X;
+    cpu->addr_abs &= 0x00FF;
+
     return 0;
 }
 uint8_t CPU_AM_REL(CPU *cpu) {
+    cpu->addr_rel = CPU_read_pc(cpu);
+    if (cpu->addr_rel & 0x80) {
+        cpu->addr_rel |= 0xFF00;
+    }
     return 0;
 }
+
 uint8_t CPU_AM_ABX(CPU *cpu) {
-    return 0;
+    uint16_t low = CPU_read_pc(cpu);
+    uint16_t high = CPU_read_pc(cpu);
+
+    cpu->addr_abs = (high << 8) | low;
+    cpu->addr_abs += cpu->reg.X;
+
+    // Deals with overflows
+    if ((cpu->addr_abs & 0xFF00) != (high << 8)) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
+
 uint8_t CPU_AM_IND(CPU *cpu) {
+    uint16_t ptr_low = CPU_read_pc(cpu);
+    uint16_t ptr_high = CPU_read_pc(cpu);
+
+    uint16_t ptr = (ptr_high << 8) | ptr_low;
+    // There is a hardware bug in the NES CPUs, this introduces this bug here to
+    // align with the hardware behaviour, see also:
+    // http://wiki.nesdev.com/w/index.php/CPU_addressing_modes
+    if (ptr_low == 0x00FF) {
+        cpu->addr_abs = (CPU_read(cpu, ptr & 0xFF0) << 8) | CPU_read(cpu, ptr + 0);
+    } else {
+        cpu->addr_abs = (CPU_read(cpu, ptr + 1) << 8) | CPU_read(cpu, ptr + 0);
+    }
+
     return 0;
 }
+
 uint8_t CPU_AM_IZY(CPU *cpu) {
-    return 0;
+    uint16_t addr = CPU_read_pc(cpu);
+
+    uint16_t low = CPU_read(cpu, addr & 0x00FF);
+    uint16_t high = CPU_read(cpu, (addr + 1) & 0x00FF);
+
+    cpu->addr_abs = (high << 8) | low + cpu->reg.Y;
+
+    if ((cpu->addr_abs & 0xFF00) != (high << 8)) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 uint8_t CPU_AM_XXX(CPU *cpu) {
     return 0;
