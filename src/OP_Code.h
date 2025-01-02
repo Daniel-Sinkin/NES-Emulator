@@ -1150,17 +1150,3 @@ void op_code_matrix_fill(OPCODE_MATRIX_ENTRY op_code_matrix[16][16]) {
         f_OP_XXX, f_AM_IMP,
         7);
 }
-
-void opcode_matrix_example() {
-    OPCODE_MATRIX_ENTRY op_code_matrix[16][16];
-    op_code_matrix_fill(op_code_matrix);
-
-    printf("Calling op at (0,0)...\n");
-    uint8_t result_opcode = op_code_matrix[0][0].op();
-    uint8_t result_addressing = op_code_matrix[0][0].am();
-
-    printf("Opcode function returned:      %u\n", result_opcode);
-    printf("Addressing mode function returned: %u\n", result_addressing);
-
-    printf("Cycles: %d\n", op_code_matrix[0][0].cycles);
-}

@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <OP_Code.h>
+
 typedef enum {
     CPU_FLAGS_C = (1 << 0), // Carry Bit
     CPU_FLAGS_Z = (1 << 1), // Zero
@@ -36,12 +38,16 @@ typedef struct {
     uint16_t addr_rel; // Relative address for jump instr.
     uint8_t opcode;
     uint8_t cycles; // cylcles remaining for current instruction
+    OPCODE_MATRIX_ENTRY OPCODE_MATRIX[16][16];
 } CPU;
 
 void CPU_init(CPU *cpu, BUS *bus) {
     if (!cpu || !bus) {
         PANIC("NULL POINTER in init!\n");
     }
+
+    // Populate the opcode matrix
+    op_code_matrix_fill(cpu->OPCODE_MATRIX);
 
     cpu->bus = bus;
 
@@ -114,8 +120,22 @@ void CPU_read_pc(CPU *cpu) {
 void CPU_clock(CPU *cpu) {
     if (cpu->cycles == 0) {
         CPU_read_pc(cpu);
+
+        char opcode_low = (cpu->opcode >> 2) & 0xF;
+        char opcode_high = cpu->opcode & 0xF;
+
+        OPCODE_MATRIX_ENTRY opcode_entry = cpu->OPCODE_MATRIX[opcode_high][opcode_low];
+
+        cpu->cycles = opcode_entry.cycles;
+        uint8_t cycle_add1 = opcode_entry.am();
+        uint8_t cycle_add2 = opcode_entry.op();
+
+        cpu->cycles += (cycle_add1 & cycle_add2);
     }
+
+    cpu->cycles -= 1;
 }
+
 void CPU_reset(CPU *cpu);
 void CPU_irq(CPU *cpu);
 void CPU_nmi(CPU *cpu);
