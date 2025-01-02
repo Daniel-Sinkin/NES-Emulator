@@ -1,15 +1,12 @@
-#pragma once
+#ifndef UTIL_H
+#define UTIL_H
 
 #include <execinfo.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-void print_backtrace() {
-    void *buffer[10];
-    int nptrs = backtrace(buffer, 10);
-    backtrace_symbols_fd(buffer, nptrs, STDERR_FILENO);
-}
+void print_backtrace();
 
 // Writes message to stderr, file name, file number,
 // If possible it tries to get backtrace info
@@ -30,3 +27,5 @@ void print_backtrace() {
         print_backtrace();                                       \
         abort();                                                 \
     } while (0)
+
+#endif // UTIL_H

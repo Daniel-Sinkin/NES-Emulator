@@ -5,9 +5,14 @@
 
 #include <BUS.h>
 #include <CPU.h>
-#include <OP_Code.h>
 
 int main() {
+    CPU cpu;
+    BUS bus;
+
+    CPU_init(&cpu, &bus);
+
+    CPU_clock(&cpu);
 
     return EXIT_SUCCESS;
 }

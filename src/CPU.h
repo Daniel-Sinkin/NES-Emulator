@@ -1,13 +1,12 @@
-#pragma once
+#ifndef CPU_H
+#define CPU_H
 
 #include <BUS.h>
-#include <Util.h>
+#include <UTIL.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <OP_Code.h>
 
 typedef enum {
     CPU_FLAGS_C = (1 << 0), // Carry Bit
@@ -38,105 +37,126 @@ typedef struct {
     uint16_t addr_rel; // Relative address for jump instr.
     uint8_t opcode;
     uint8_t cycles; // cylcles remaining for current instruction
-    OPCODE_MATRIX_ENTRY OPCODE_MATRIX[16][16];
 } CPU;
 
-void CPU_init(CPU *cpu, BUS *bus) {
-    if (!cpu || !bus) {
-        PANIC("NULL POINTER in init!\n");
-    }
+void CPU_init(CPU *cpu, BUS *bus);
 
-    // Populate the opcode matrix
-    op_code_matrix_fill(cpu->OPCODE_MATRIX);
-
-    cpu->bus = bus;
-
-    cpu->clock_counter = 0;
-    cpu->fetched = 0x00;
-    cpu->addr_abs = 0x0000;
-    cpu->addr_rel = 0x0000;
-    cpu->opcode = 0x00;
-    cpu->cycles = 0x00;
-
-    cpu->reg.A = 0x00;
-    cpu->reg.X = 0x00;
-    cpu->reg.Y = 0x00;
-    cpu->reg.SP = 0xFD;
-    cpu->reg.PC = 0x0000;
-    cpu->reg.STATUS = 0x00;
-}
-
-uint8_t CPU_read(CPU *cpu, uint16_t addr) {
-    return BUS_read(cpu->bus, addr, false);
-}
-
-void CPU_write(CPU *cpu, uint16_t addr, uint8_t data) {
-    BUS_write(cpu->bus, addr, data);
-}
-
-uint8_t CPU_get_flag(CPU *cpu, CPU_FLAGS flag) {
-    return cpu->reg.STATUS & flag;
-}
-
-void CPU_set_flag(CPU *cpu, CPU_FLAGS flag) {
-    cpu->reg.STATUS |= flag;
-}
-
-void CPU_unset_flag(CPU *cpu, CPU_FLAGS flag) {
-    cpu->reg.STATUS &= ~flag;
-}
-
-void CPU_print_registers(CPU *cpu) {
-    if (!cpu) {
-        printf("Error: CPU pointer is NULL.\n");
-        return;
-    }
-
-    printf("=== CPU Registers ===\n");
-    printf(" A:     0x%02X    | Accumulator\n", cpu->reg.A);
-    printf(" X:     0x%02X    | X Register\n", cpu->reg.X);
-    printf(" Y:     0x%02X    | Y Register\n", cpu->reg.Y);
-    printf("SP:     0x%02X    | Stack Pointer\n", cpu->reg.SP);
-    printf("PC:     0x%04X  | Program Counter\n", cpu->reg.PC);
-    printf("STATUS: 0x%02X    | [ ", cpu->reg.STATUS);
-
-    printf("N:%d ", (CPU_get_flag(cpu, CPU_FLAGS_N)) ? 1 : 0);
-    printf("V:%d ", (CPU_get_flag(cpu, CPU_FLAGS_V)) ? 1 : 0);
-    printf("U:%d ", (CPU_get_flag(cpu, CPU_FLAGS_U)) ? 1 : 0);
-    printf("B:%d ", (CPU_get_flag(cpu, CPU_FLAGS_B)) ? 1 : 0);
-    printf("D:%d ", (CPU_get_flag(cpu, CPU_FLAGS_D)) ? 1 : 0);
-    printf("I:%d ", (CPU_get_flag(cpu, CPU_FLAGS_I)) ? 1 : 0);
-    printf("Z:%d ", (CPU_get_flag(cpu, CPU_FLAGS_Z)) ? 1 : 0);
-    printf("C:%d ", (CPU_get_flag(cpu, CPU_FLAGS_C)) ? 1 : 0);
-    printf("]\n");
-    printf("=====================\n");
-}
-
-void CPU_read_pc(CPU *cpu) {
-    cpu->opcode = CPU_read(&cpu, cpu->reg.PC);
-    cpu->reg.PC += 1;
-}
-
-void CPU_clock(CPU *cpu) {
-    if (cpu->cycles == 0) {
-        CPU_read_pc(cpu);
-
-        char opcode_low = (cpu->opcode >> 2) & 0xF;
-        char opcode_high = cpu->opcode & 0xF;
-
-        OPCODE_MATRIX_ENTRY opcode_entry = cpu->OPCODE_MATRIX[opcode_high][opcode_low];
-
-        cpu->cycles = opcode_entry.cycles;
-        uint8_t cycle_add1 = opcode_entry.am();
-        uint8_t cycle_add2 = opcode_entry.op();
-
-        cpu->cycles += (cycle_add1 & cycle_add2);
-    }
-
-    cpu->cycles -= 1;
-}
+uint8_t CPU_read(CPU *cpu, uint16_t addr);
+void CPU_write(CPU *cpu, uint16_t addr, uint8_t data);
+uint8_t CPU_get_flag(CPU *cpu, CPU_FLAGS flag);
+void CPU_set_flag(CPU *cpu, CPU_FLAGS flag);
+void CPU_unset_flag(CPU *cpu, CPU_FLAGS flag);
+void CPU_print_registers(CPU *cpu);
+void CPU_read_pc(CPU *cpu);
+void CPU_clock(CPU *cpu);
 
 void CPU_reset(CPU *cpu);
 void CPU_irq(CPU *cpu);
 void CPU_nmi(CPU *cpu);
 void CPU_fetch(CPU *cpu);
+
+// Addressing mode functions
+uint8_t CPU_AM_IMP(CPU *cpu);
+uint8_t CPU_AM_ZP0(CPU *cpu);
+uint8_t CPU_AM_ZPY(CPU *cpu);
+uint8_t CPU_AM_ABS(CPU *cpu);
+uint8_t CPU_AM_ABY(CPU *cpu);
+uint8_t CPU_AM_IZX(CPU *cpu);
+uint8_t CPU_AM_IMM(CPU *cpu);
+uint8_t CPU_AM_ZPX(CPU *cpu);
+uint8_t CPU_AM_REL(CPU *cpu);
+uint8_t CPU_AM_ABX(CPU *cpu);
+uint8_t CPU_AM_IND(CPU *cpu);
+uint8_t CPU_AM_IZY(CPU *cpu);
+uint8_t CPU_AM_XXX(CPU *cpu);
+
+// opcode functions
+uint8_t CPU_ADC(CPU *cpu);
+uint8_t CPU_AND(CPU *cpu);
+uint8_t CPU_ASL(CPU *cpu);
+uint8_t CPU_BCC(CPU *cpu);
+uint8_t CPU_BCS(CPU *cpu);
+uint8_t CPU_BEQ(CPU *cpu);
+uint8_t CPU_BIT(CPU *cpu);
+uint8_t CPU_BMI(CPU *cpu);
+uint8_t CPU_BNE(CPU *cpu);
+uint8_t CPU_BPL(CPU *cpu);
+uint8_t CPU_BRK(CPU *cpu);
+uint8_t CPU_BVC(CPU *cpu);
+uint8_t CPU_BVS(CPU *cpu);
+uint8_t CPU_CLC(CPU *cpu);
+uint8_t CPU_CLD(CPU *cpu);
+uint8_t CPU_CLI(CPU *cpu);
+uint8_t CPU_CLV(CPU *cpu);
+uint8_t CPU_CMP(CPU *cpu);
+uint8_t CPU_CPX(CPU *cpu);
+uint8_t CPU_CPY(CPU *cpu);
+uint8_t CPU_DEC(CPU *cpu);
+uint8_t CPU_DEX(CPU *cpu);
+uint8_t CPU_DEY(CPU *cpu);
+uint8_t CPU_EOR(CPU *cpu);
+uint8_t CPU_INC(CPU *cpu);
+uint8_t CPU_INX(CPU *cpu);
+uint8_t CPU_INY(CPU *cpu);
+uint8_t CPU_JMP(CPU *cpu);
+uint8_t CPU_JSR(CPU *cpu);
+uint8_t CPU_LDA(CPU *cpu);
+uint8_t CPU_LDX(CPU *cpu);
+uint8_t CPU_LDY(CPU *cpu);
+uint8_t CPU_LSR(CPU *cpu);
+uint8_t CPU_NOP(CPU *cpu);
+uint8_t CPU_ORA(CPU *cpu);
+uint8_t CPU_PHA(CPU *cpu);
+uint8_t CPU_PHP(CPU *cpu);
+uint8_t CPU_PLA(CPU *cpu);
+uint8_t CPU_PLP(CPU *cpu);
+uint8_t CPU_ROL(CPU *cpu);
+uint8_t CPU_ROR(CPU *cpu);
+uint8_t CPU_RTI(CPU *cpu);
+uint8_t CPU_RTS(CPU *cpu);
+uint8_t CPU_SBC(CPU *cpu);
+uint8_t CPU_SEC(CPU *cpu);
+uint8_t CPU_SED(CPU *cpu);
+uint8_t CPU_SEI(CPU *cpu);
+uint8_t CPU_STA(CPU *cpu);
+uint8_t CPU_STX(CPU *cpu);
+uint8_t CPU_STY(CPU *cpu);
+uint8_t CPU_TAX(CPU *cpu);
+uint8_t CPU_TAY(CPU *cpu);
+uint8_t CPU_TSX(CPU *cpu);
+uint8_t CPU_TXA(CPU *cpu);
+uint8_t CPU_TXS(CPU *cpu);
+uint8_t CPU_TYA(CPU *cpu);
+uint8_t CPU_XXX(CPU *cpu);
+
+typedef uint8_t (*CPU_OpFunc)(CPU *cpu);
+typedef uint8_t (*CPU_AMFunc)(CPU *cpu);
+
+typedef struct {
+    CPU_OpFunc op;
+    CPU_AMFunc am;
+    uint8_t cycles;
+} OP_CODE_MATRIX_ENTRY;
+
+// clang-format off
+static const OP_CODE_MATRIX_ENTRY OP_CODE_MATRIX[] = {
+	{ CPU_BRK, CPU_AM_IMM, 7 },{ CPU_ORA, CPU_AM_IZX, 6 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_NOP, CPU_AM_IMP, 3 },{ CPU_ORA, CPU_AM_ZP0, 3 },{ CPU_ASL, CPU_AM_ZP0, 5 },{ CPU_XXX, CPU_AM_IMP, 5 },{ CPU_PHP, CPU_AM_IMP, 3 },{ CPU_ORA, CPU_AM_IMM, 2 },{ CPU_ASL, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_ORA, CPU_AM_ABS, 4 },{ CPU_ASL, CPU_AM_ABS, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },
+	{ CPU_BPL, CPU_AM_REL, 2 },{ CPU_ORA, CPU_AM_IZY, 5 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_ORA, CPU_AM_ZPX, 4 },{ CPU_ASL, CPU_AM_ZPX, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },{ CPU_CLC, CPU_AM_IMP, 2 },{ CPU_ORA, CPU_AM_ABY, 4 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 7 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_ORA, CPU_AM_ABX, 4 },{ CPU_ASL, CPU_AM_ABX, 7 },{ CPU_XXX, CPU_AM_IMP, 7 },
+	{ CPU_JSR, CPU_AM_ABS, 6 },{ CPU_AND, CPU_AM_IZX, 6 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_BIT, CPU_AM_ZP0, 3 },{ CPU_AND, CPU_AM_ZP0, 3 },{ CPU_ROL, CPU_AM_ZP0, 5 },{ CPU_XXX, CPU_AM_IMP, 5 },{ CPU_PLP, CPU_AM_IMP, 4 },{ CPU_AND, CPU_AM_IMM, 2 },{ CPU_ROL, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_BIT, CPU_AM_ABS, 4 },{ CPU_AND, CPU_AM_ABS, 4 },{ CPU_ROL, CPU_AM_ABS, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },
+	{ CPU_BMI, CPU_AM_REL, 2 },{ CPU_AND, CPU_AM_IZY, 5 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_AND, CPU_AM_ZPX, 4 },{ CPU_ROL, CPU_AM_ZPX, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },{ CPU_SEC, CPU_AM_IMP, 2 },{ CPU_AND, CPU_AM_ABY, 4 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 7 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_AND, CPU_AM_ABX, 4 },{ CPU_ROL, CPU_AM_ABX, 7 },{ CPU_XXX, CPU_AM_IMP, 7 },
+	{ CPU_RTI, CPU_AM_IMP, 6 },{ CPU_EOR, CPU_AM_IZX, 6 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_NOP, CPU_AM_IMP, 3 },{ CPU_EOR, CPU_AM_ZP0, 3 },{ CPU_LSR, CPU_AM_ZP0, 5 },{ CPU_XXX, CPU_AM_IMP, 5 },{ CPU_PHA, CPU_AM_IMP, 3 },{ CPU_EOR, CPU_AM_IMM, 2 },{ CPU_LSR, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_JMP, CPU_AM_ABS, 3 },{ CPU_EOR, CPU_AM_ABS, 4 },{ CPU_LSR, CPU_AM_ABS, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },
+	{ CPU_BVC, CPU_AM_REL, 2 },{ CPU_EOR, CPU_AM_IZY, 5 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_EOR, CPU_AM_ZPX, 4 },{ CPU_LSR, CPU_AM_ZPX, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },{ CPU_CLI, CPU_AM_IMP, 2 },{ CPU_EOR, CPU_AM_ABY, 4 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 7 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_EOR, CPU_AM_ABX, 4 },{ CPU_LSR, CPU_AM_ABX, 7 },{ CPU_XXX, CPU_AM_IMP, 7 },
+	{ CPU_RTS, CPU_AM_IMP, 6 },{ CPU_ADC, CPU_AM_IZX, 6 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_NOP, CPU_AM_IMP, 3 },{ CPU_ADC, CPU_AM_ZP0, 3 },{ CPU_ROR, CPU_AM_ZP0, 5 },{ CPU_XXX, CPU_AM_IMP, 5 },{ CPU_PLA, CPU_AM_IMP, 4 },{ CPU_ADC, CPU_AM_IMM, 2 },{ CPU_ROR, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_JMP, CPU_AM_IND, 5 },{ CPU_ADC, CPU_AM_ABS, 4 },{ CPU_ROR, CPU_AM_ABS, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },
+	{ CPU_BVS, CPU_AM_REL, 2 },{ CPU_ADC, CPU_AM_IZY, 5 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_ADC, CPU_AM_ZPX, 4 },{ CPU_ROR, CPU_AM_ZPX, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },{ CPU_SEI, CPU_AM_IMP, 2 },{ CPU_ADC, CPU_AM_ABY, 4 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 7 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_ADC, CPU_AM_ABX, 4 },{ CPU_ROR, CPU_AM_ABX, 7 },{ CPU_XXX, CPU_AM_IMP, 7 },
+	{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_STA, CPU_AM_IZX, 6 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 6 },{ CPU_STY, CPU_AM_ZP0, 3 },{ CPU_STA, CPU_AM_ZP0, 3 },{ CPU_STX, CPU_AM_ZP0, 3 },{ CPU_XXX, CPU_AM_IMP, 3 },{ CPU_DEY, CPU_AM_IMP, 2 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_TXA, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_STY, CPU_AM_ABS, 4 },{ CPU_STA, CPU_AM_ABS, 4 },{ CPU_STX, CPU_AM_ABS, 4 },{ CPU_XXX, CPU_AM_IMP, 4 },
+	{ CPU_BCC, CPU_AM_REL, 2 },{ CPU_STA, CPU_AM_IZY, 6 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 6 },{ CPU_STY, CPU_AM_ZPX, 4 },{ CPU_STA, CPU_AM_ZPX, 4 },{ CPU_STX, CPU_AM_ZPY, 4 },{ CPU_XXX, CPU_AM_IMP, 4 },{ CPU_TYA, CPU_AM_IMP, 2 },{ CPU_STA, CPU_AM_ABY, 5 },{ CPU_TXS, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 5 },{ CPU_NOP, CPU_AM_IMP, 5 },{ CPU_STA, CPU_AM_ABX, 5 },{ CPU_XXX, CPU_AM_IMP, 5 },{ CPU_XXX, CPU_AM_IMP, 5 },
+	{ CPU_LDY, CPU_AM_IMM, 2 },{ CPU_LDA, CPU_AM_IZX, 6 },{ CPU_LDX, CPU_AM_IMM, 2 },{ CPU_XXX, CPU_AM_IMP, 6 },{ CPU_LDY, CPU_AM_ZP0, 3 },{ CPU_LDA, CPU_AM_ZP0, 3 },{ CPU_LDX, CPU_AM_ZP0, 3 },{ CPU_XXX, CPU_AM_IMP, 3 },{ CPU_TAY, CPU_AM_IMP, 2 },{ CPU_LDA, CPU_AM_IMM, 2 },{ CPU_TAX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_LDY, CPU_AM_ABS, 4 },{ CPU_LDA, CPU_AM_ABS, 4 },{ CPU_LDX, CPU_AM_ABS, 4 },{ CPU_XXX, CPU_AM_IMP, 4 },
+	{ CPU_BCS, CPU_AM_REL, 2 },{ CPU_LDA, CPU_AM_IZY, 5 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 5 },{ CPU_LDY, CPU_AM_ZPX, 4 },{ CPU_LDA, CPU_AM_ZPX, 4 },{ CPU_LDX, CPU_AM_ZPY, 4 },{ CPU_XXX, CPU_AM_IMP, 4 },{ CPU_CLV, CPU_AM_IMP, 2 },{ CPU_LDA, CPU_AM_ABY, 4 },{ CPU_TSX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 4 },{ CPU_LDY, CPU_AM_ABX, 4 },{ CPU_LDA, CPU_AM_ABX, 4 },{ CPU_LDX, CPU_AM_ABY, 4 },{ CPU_XXX, CPU_AM_IMP, 4 },
+	{ CPU_CPY, CPU_AM_IMM, 2 },{ CPU_CMP, CPU_AM_IZX, 6 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_CPY, CPU_AM_ZP0, 3 },{ CPU_CMP, CPU_AM_ZP0, 3 },{ CPU_DEC, CPU_AM_ZP0, 5 },{ CPU_XXX, CPU_AM_IMP, 5 },{ CPU_INY, CPU_AM_IMP, 2 },{ CPU_CMP, CPU_AM_IMM, 2 },{ CPU_DEX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_CPY, CPU_AM_ABS, 4 },{ CPU_CMP, CPU_AM_ABS, 4 },{ CPU_DEC, CPU_AM_ABS, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },
+	{ CPU_BNE, CPU_AM_REL, 2 },{ CPU_CMP, CPU_AM_IZY, 5 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_CMP, CPU_AM_ZPX, 4 },{ CPU_DEC, CPU_AM_ZPX, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },{ CPU_CLD, CPU_AM_IMP, 2 },{ CPU_CMP, CPU_AM_ABY, 4 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 7 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_CMP, CPU_AM_ABX, 4 },{ CPU_DEC, CPU_AM_ABX, 7 },{ CPU_XXX, CPU_AM_IMP, 7 },
+	{ CPU_CPX, CPU_AM_IMM, 2 },{ CPU_SBC, CPU_AM_IZX, 6 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_CPX, CPU_AM_ZP0, 3 },{ CPU_SBC, CPU_AM_ZP0, 3 },{ CPU_INC, CPU_AM_ZP0, 5 },{ CPU_XXX, CPU_AM_IMP, 5 },{ CPU_INX, CPU_AM_IMP, 2 },{ CPU_SBC, CPU_AM_IMM, 2 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_SBC, CPU_AM_IMP, 2 },{ CPU_CPX, CPU_AM_ABS, 4 },{ CPU_SBC, CPU_AM_ABS, 4 },{ CPU_INC, CPU_AM_ABS, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },
+	{ CPU_BEQ, CPU_AM_REL, 2 },{ CPU_SBC, CPU_AM_IZY, 5 },{ CPU_XXX, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 8 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_SBC, CPU_AM_ZPX, 4 },{ CPU_INC, CPU_AM_ZPX, 6 },{ CPU_XXX, CPU_AM_IMP, 6 },{ CPU_SED, CPU_AM_IMP, 2 },{ CPU_SBC, CPU_AM_ABY, 4 },{ CPU_NOP, CPU_AM_IMP, 2 },{ CPU_XXX, CPU_AM_IMP, 7 },{ CPU_NOP, CPU_AM_IMP, 4 },{ CPU_SBC, CPU_AM_ABX, 4 },{ CPU_INC, CPU_AM_ABX, 7 },{ CPU_XXX, CPU_AM_IMP, 7 },
+};
+// clang-format on
+
+#endif // CPU_H
