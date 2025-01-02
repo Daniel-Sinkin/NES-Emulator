@@ -106,7 +106,16 @@ void CPU_print_registers(CPU *cpu) {
     printf("=====================\n");
 }
 
-void CPU_clock(CPU *cpu);
+void CPU_read_pc(CPU *cpu) {
+    cpu->opcode = CPU_read(&cpu, cpu->reg.PC);
+    cpu->reg.PC += 1;
+}
+
+void CPU_clock(CPU *cpu) {
+    if (cpu->cycles == 0) {
+        CPU_read_pc(cpu);
+    }
+}
 void CPU_reset(CPU *cpu);
 void CPU_irq(CPU *cpu);
 void CPU_nmi(CPU *cpu);
