@@ -8,18 +8,20 @@
 #include <OP_Code.h>
 
 int main() {
+    /*
     BUS bus;
     BUS_init(&bus);
     CPU cpu;
     CPU_init(&cpu, &bus);
 
-    CPU_write(&cpu, 0x1, 0xDC);
-    CPU_write(&cpu, 0x3, 0xA3);
+    CPU_print_registers(&cpu);
+    CPU_set_flag(&cpu, CPU_FLAGS_U);
+    CPU_print_registers(&cpu);
+    CPU_unset_flag(&cpu, CPU_FLAGS_U);
+    CPU_print_registers(&cpu);
+    */
 
-    for (size_t i = 0; i < RAM_SIZE; i++) {
-        printf("%d\n", CPU_read(&cpu, i));
-        if (i > 5) break;
-    }
+    opcode_matrix_example();
 
     return EXIT_SUCCESS;
 }
