@@ -26,6 +26,11 @@ uint8_t CPU_read(CPU *cpu, uint16_t addr) {
     return BUS_read(cpu->bus, addr, false);
 }
 
+uint8_t CPU_read_from_stack(CPU *cpu) {
+    cpu->reg.SP += 1;
+    return CPU_read(cpu, STACK_ORIGIN + cpu->reg.SP);
+}
+
 uint8_t CPU_read_pc(CPU *cpu) {
     // Also increments the PC
     uint8_t val = CPU_read(cpu, cpu->reg.PC);
@@ -37,16 +42,21 @@ void CPU_write(CPU *cpu, uint16_t addr, uint8_t data) {
     BUS_write(cpu->bus, addr, data);
 }
 
+void CPU_write_to_stack(CPU *cpu, uint8_t data) {
+    CPU_write(cpu, STACK_ORIGIN + cpu->reg.SP, data);
+    cpu->reg.SP -= 1;
+}
+
 uint8_t CPU_get_flag(CPU *cpu, CPU_FLAGS flag) {
     return cpu->reg.STATUS & flag;
 }
 
-void CPU_set_flag(CPU *cpu, CPU_FLAGS flag) {
-    cpu->reg.STATUS |= flag;
-}
-
-void CPU_unset_flag(CPU *cpu, CPU_FLAGS flag) {
-    cpu->reg.STATUS &= ~flag;
+void CPU_set_flag(CPU *cpu, CPU_FLAGS flag, bool activate) {
+    if (activate) {
+        cpu->reg.STATUS |= flag;
+    } else {
+        cpu->reg.STATUS &= ~flag;
+    }
 }
 
 void CPU_print_registers(CPU *cpu) {
@@ -93,12 +103,65 @@ void CPU_clock(CPU *cpu) {
 }
 
 void CPU_reset(CPU *cpu) {
+    cpu->reg.A = 0;
+    cpu->reg.X = 0;
+    cpu->reg.Y = 0;
+    cpu->reg.SP = 0xFD;
+    cpu->reg.STATUS = 0x00 | CPU_FLAGS_U;
+
+    cpu->addr_abs = 0xFFFC;
+    uint16_t low = CPU_read(cpu, cpu->addr_abs + 0);
+    uint16_t high = CPU_read(cpu, cpu->addr_abs + 1);
+
+    cpu->reg.PC = (high << 8) | low;
+
+    cpu->addr_rel = 0x0000;
+    cpu->addr_abs = 0x0000;
+    cpu->fetched = 0x00;
+
+    cpu->cycles = 8;
 }
 void CPU_irq(CPU *cpu) {
+    if (CPU_get_flag(cpu, CPU_FLAGS_I) == 0) return;
+
+    CPU_write_to_stack(cpu, (cpu->reg.PC >> 8) & 0x00FF);
+    CPU_write_to_stack(cpu, cpu->reg.PC & 0x00FF);
+
+    CPU_set_flag(cpu, CPU_FLAGS_B, false);
+    CPU_set_flag(cpu, CPU_FLAGS_U, true);
+    CPU_set_flag(cpu, CPU_FLAGS_I, true);
+    CPU_write_to_stack(cpu, cpu->reg.STATUS);
+
+    cpu->addr_abs = 0xFFFE;
+    uint16_t low = CPU_read(cpu, cpu->addr_abs + 0);
+    uint16_t high = CPU_read(cpu, cpu->addr_abs + 1);
+    cpu->reg.PC = (high << 8) | low;
+
+    cpu->cycles = 7;
 }
+
 void CPU_nmi(CPU *cpu) {
+    CPU_write_to_stack(cpu, (cpu->reg.PC) >> 8 & 0x00FF);
+    CPU_write_to_stack(cpu, (cpu->reg.PC) & 0x00FF);
+
+    CPU_set_flag(cpu, CPU_FLAGS_B, false);
+    CPU_set_flag(cpu, CPU_FLAGS_U, true);
+    CPU_set_flag(cpu, CPU_FLAGS_I, true);
+    CPU_write_to_stack(cpu, cpu->reg.STATUS);
+
+    cpu->addr_abs = 0xFFFE;
+    uint16_t low = CPU_read(cpu, cpu->addr_abs + 0);
+    uint16_t high = CPU_read(cpu, cpu->addr_abs + 1);
+    cpu->reg.PC = (high << 8) | low;
+
+    cpu->cycles = 8;
 }
+
 void CPU_fetch(CPU *cpu) {
+    if (OP_CODE_MATRIX[cpu->opcode].am == CPU_AM_IMP) {
+        cpu->fetched = CPU_read(cpu, cpu->addr_abs);
+    }
+    return cpu->fetched;
 }
 
 // Addressing mode functions
@@ -222,33 +285,96 @@ uint8_t CPU_AM_XXX(CPU *cpu) {
 
 // opcode functions
 uint8_t CPU_ADC(CPU *cpu) {
-    return 0;
+    CPU_fetch(cpu);
+
+    uint16_t tmp = (uint16_t)cpu->reg.A + (uint16_t)cpu->fetched + (uint16_t)CPU_get_flag(cpu, CPU_FLAGS_C);
+    CPU_set_flag(cpu, CPU_FLAGS_C, tmp > 255);
+    CPU_set_flag(cpu, CPU_FLAGS_Z, (tmp & 0x00FF) == 0);
+    CPU_set_flag(cpu, CPU_FLAGS_N, 0x80);
+    CPU_set_flag(
+        cpu,
+        CPU_FLAGS_V,
+        (~((uint16_t)cpu->reg.A ^ (uint16_t)cpu->fetched) & ((uint16_t)cpu->reg.A ^ (uint16_t)tmp)));
+    cpu->reg.A = tmp & 0x00FF;
+    return 1;
 }
 uint8_t CPU_AND(CPU *cpu) {
-    return 0;
+    CPU_fetch(cpu);
+    cpu->reg.A &= cpu->fetched;
+    if (cpu->reg.A == 0x00) CPU_set_flag(cpu, CPU_FLAGS_Z, true);
+    if (cpu->reg.A & 0x80) CPU_set_flag(cpu, CPU_FLAGS_N, true);
+    return 1;
 }
 uint8_t CPU_ASL(CPU *cpu) {
     return 0;
 }
 uint8_t CPU_BCC(CPU *cpu) {
+    if (CPU_get_flag(cpu, CPU_FLAGS_C) == 0) {
+        cpu->cycles += 1;
+        cpu->addr_abs = cpu->reg.PC + cpu->addr_rel;
+
+        if ((cpu->addr_abs & 0xFF00) != (cpu->reg.PC & 0xFF00)) cpu->cycles += 1;
+
+        cpu->reg.PC = cpu->addr_abs;
+    }
     return 0;
 }
 uint8_t CPU_BCS(CPU *cpu) {
+    if (CPU_get_flag(cpu, CPU_FLAGS_C)) {
+        cpu->cycles += 1;
+        cpu->addr_abs = cpu->reg.PC + cpu->addr_rel;
+
+        if ((cpu->addr_abs & 0xFF00) != (cpu->reg.PC & 0xFF00)) cpu->cycles += 1;
+
+        cpu->reg.PC = cpu->addr_abs;
+    }
     return 0;
 }
 uint8_t CPU_BEQ(CPU *cpu) {
+    if (CPU_get_flag(cpu, CPU_FLAGS_Z)) {
+        cpu->cycles += 1;
+        cpu->addr_abs = cpu->reg.PC + cpu->addr_rel;
+
+        if ((cpu->addr_abs & 0xFF00) != (cpu->reg.PC & 0xFF00)) cpu->cycles += 1;
+
+        cpu->reg.PC = cpu->addr_abs;
+    }
     return 0;
 }
 uint8_t CPU_BIT(CPU *cpu) {
     return 0;
 }
 uint8_t CPU_BMI(CPU *cpu) {
+    if (CPU_get_flag(cpu, CPU_FLAGS_N)) {
+        cpu->cycles += 1;
+        cpu->addr_abs = cpu->reg.PC + cpu->addr_rel;
+
+        if ((cpu->addr_abs & 0xFF00) != (cpu->reg.PC & 0xFF00)) cpu->cycles += 1;
+
+        cpu->reg.PC = cpu->addr_abs;
+    }
     return 0;
 }
 uint8_t CPU_BNE(CPU *cpu) {
+    if (CPU_get_flag(cpu, CPU_FLAGS_Z) == 0) {
+        cpu->cycles += 1;
+        cpu->addr_abs = cpu->reg.PC + cpu->addr_rel;
+
+        if ((cpu->addr_abs & 0xFF00) != (cpu->reg.PC & 0xFF00)) cpu->cycles += 1;
+
+        cpu->reg.PC = cpu->addr_abs;
+    }
     return 0;
 }
 uint8_t CPU_BPL(CPU *cpu) {
+    if (CPU_get_flag(cpu, CPU_FLAGS_N) == 0) {
+        cpu->cycles += 1;
+        cpu->addr_abs = cpu->reg.PC + cpu->addr_rel;
+
+        if ((cpu->addr_abs & 0xFF00) != (cpu->reg.PC & 0xFF00)) cpu->cycles += 1;
+
+        cpu->reg.PC = cpu->addr_abs;
+    }
     return 0;
 }
 uint8_t CPU_BRK(CPU *cpu) {
@@ -256,15 +382,33 @@ uint8_t CPU_BRK(CPU *cpu) {
     return 0;
 }
 uint8_t CPU_BVC(CPU *cpu) {
+    if (CPU_get_flag(cpu, CPU_FLAGS_V) == 0) {
+        cpu->cycles += 1;
+        cpu->addr_abs = cpu->reg.PC + cpu->addr_rel;
+
+        if ((cpu->addr_abs & 0xFF00) != (cpu->reg.PC & 0xFF00)) cpu->cycles += 1;
+
+        cpu->reg.PC = cpu->addr_abs;
+    }
     return 0;
 }
 uint8_t CPU_BVS(CPU *cpu) {
+    if (CPU_get_flag(cpu, CPU_FLAGS_V)) {
+        cpu->cycles += 1;
+        cpu->addr_abs = cpu->reg.PC + cpu->addr_rel;
+
+        if ((cpu->addr_abs & 0xFF00) != (cpu->reg.PC & 0xFF00)) cpu->cycles += 1;
+
+        cpu->reg.PC = cpu->addr_abs;
+    }
     return 0;
 }
 uint8_t CPU_CLC(CPU *cpu) {
+    CPU_set_flag(cpu, CPU_FLAGS_C, false);
     return 0;
 }
 uint8_t CPU_CLD(CPU *cpu) {
+    CPU_set_flag(cpu, CPU_FLAGS_D, false);
     return 0;
 }
 uint8_t CPU_CLI(CPU *cpu) {
@@ -328,12 +472,18 @@ uint8_t CPU_ORA(CPU *cpu) {
     return 0;
 }
 uint8_t CPU_PHA(CPU *cpu) {
+    // Push on stack
+    CPU_write_to_stack(cpu, cpu->reg.A);
     return 0;
 }
 uint8_t CPU_PHP(CPU *cpu) {
     return 0;
 }
 uint8_t CPU_PLA(CPU *cpu) {
+    // Pop off stack
+    cpu->reg.A = CPU_read_from_stack(cpu);
+    CPU_set_flag(cpu, CPU_FLAGS_Z, cpu->reg.A == 0x00);
+    CPU_set_flag(cpu, CPU_FLAGS_N, cpu->reg.A & 0x80);
     return 0;
 }
 uint8_t CPU_PLP(CPU *cpu) {
@@ -346,12 +496,32 @@ uint8_t CPU_ROR(CPU *cpu) {
     return 0;
 }
 uint8_t CPU_RTI(CPU *cpu) {
+    cpu->reg.STATUS = CPU_read_from_stack(cpu);
+    CPU_set_flag(cpu, CPU_FLAGS_B, false);
+    CPU_set_flag(cpu, CPU_FLAGS_U, false);
+
+    cpu->reg.PC = CPU_read_from_stack(cpu);
+    cpu->reg.PC |= CPU_read_from_stack(cpu) << 8;
+
     return 0;
 }
 uint8_t CPU_RTS(CPU *cpu) {
     return 0;
 }
 uint8_t CPU_SBC(CPU *cpu) {
+    CPU_fetch(cpu);
+
+    uint16_t fetched_inv = ((uint16_t)cpu->fetched) ^ 0x00FF;
+
+    uint16_t tmp = (uint16_t)cpu->reg.A + fetched_inv + (uint16_t)CPU_get_flag(cpu, CPU_FLAGS_C);
+    CPU_set_flag(cpu, CPU_FLAGS_C, tmp & 0xFF00);
+    CPU_set_flag(cpu, CPU_FLAGS_Z, (tmp & 0x00FF) == 0);
+    CPU_set_flag(cpu, CPU_FLAGS_N, 0x0080);
+    CPU_set_flag(
+        cpu,
+        CPU_FLAGS_V,
+        (tmp ^ (uint16_t)cpu->reg.A) & (tmp ^ fetched_inv) & 0x0080);
+    cpu->reg.A = tmp & 0x00FF;
     return 0;
 }
 uint8_t CPU_SEC(CPU *cpu) {

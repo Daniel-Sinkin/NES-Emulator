@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define STACK_ORIGIN 0x0100
+
 typedef enum {
     CPU_FLAGS_C = (1 << 0), // Carry Bit
     CPU_FLAGS_Z = (1 << 1), // Zero
